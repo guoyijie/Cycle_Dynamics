@@ -276,11 +276,11 @@ class VecCollector(BaseCollector):
             epi_done = np.zeros((self.eval_env.env_nums, 1)).astype(np.bool)
 
             eval_obs = self.eval_env.reset()
-            print("Initially:")
-            print("States", eval_obs[0])
-            print("Hand pos", self.eval_env.envs[0].get_endeff_pos())
-            print("Obj pos", self.eval_env.envs[0]._get_pos_objects())
-            print("Goal pos", self.eval_env.envs[0]._get_pos_goal())
+            # print("Initially:")
+            # print("States", eval_obs[0])
+            # print("Hand pos", self.eval_env.envs[0].get_endeff_pos())
+            # print("Obj pos", self.eval_env.envs[0]._get_pos_objects())
+            # print("Goal pos", self.eval_env.envs[0]._get_pos_goal())
 
             rews = np.zeros_like(done)
             traj_len = np.zeros_like(rews)
@@ -299,15 +299,15 @@ class VecCollector(BaseCollector):
                     exit()
                 try:
                     eval_obs, r, done, infos = self.eval_env.step(act)
-                    if step_cnter<=5 or (step_cnter % 5 == 0):
-                        render_result = self.eval_env.envs[0].render(mode='rgb_array')
-                        plt.imsave('test_push_step_succ_change' + str(step_cnter) + '.png', render_result)
-                        print("Image saved. At epoch ", step_cnter)
-                        print("States", eval_obs[0])
-                        print("Hand pos", self.eval_env.envs[0].get_endeff_pos())
-                        print("Obj pos", self.eval_env.envs[0]._get_pos_objects())
-                        print("Goal pos", self.eval_env.envs[0]._get_pos_goal())
-                        print("\n")
+                    # if step_cnter<=5 or (step_cnter % 5 == 0):
+                    #     render_result = self.eval_env.envs[0].render(mode='rgb_array')
+                    #     plt.imsave('test_push_step_succ_change' + str(step_cnter) + '.png', render_result)
+                    #     print("Image saved. At epoch ", step_cnter)
+                    #     print("States", eval_obs[0])
+                    #     print("Hand pos", self.eval_env.envs[0].get_endeff_pos())
+                    #     print("Obj pos", self.eval_env.envs[0]._get_pos_objects())
+                    #     print("Goal pos", self.eval_env.envs[0]._get_pos_goal())
+                    #     print("\n")
 
 
                     for i in range(len(infos['success'])):
