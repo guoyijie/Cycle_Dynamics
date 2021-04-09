@@ -22,7 +22,7 @@ class TD3(object):
     def __init__(self,policy_path,state_dim,action_dim,max_action):
         self.actor = Actor(state_dim, action_dim, max_action).cuda()
         self.weight_path = policy_path
-        self.actor.load_state_dict(torch.load(self.weight_path))
+        self.actor.load_state_dict(torch.load("/home/wuqiuche/Cycle_Dynamics/logs/cross_physics/HalfCheetah-v2_base/models/TD3_HalfCheetah-v2_0_actor"))
         print('policy weight loaded!')
         # self.axmodel = Axmodel(opt).cuda()
         # self.ax_weight_path = opt.axmodel_path
@@ -108,7 +108,7 @@ class CycleData:
         return torch.tensor(data).float().cuda()
 
     def collect(self, data_id):
-        self.env_logs = safe_path(os.path.join(self.log_root,'{}_data'.format(self.opt.env)))
+        self.env_logs = safe_path("/home/wuqiuche/Cycle_Dynamics/logs/cross_physics/HalfCheetah-v2_data")
         data_folder = safe_path(os.path.join(self.env_logs,'{}_{}'.format(self.opt.data_type,self.opt.data_id)))
         self.data_folder = data_folder
         if not os.path.exists(data_folder):

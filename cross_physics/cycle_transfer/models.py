@@ -107,6 +107,36 @@ class Axmodel(nn.Module):
         action = self.fc(state)*self.max_action
         return action
 
+class Stmodel(nn.Module):
+    def __init__(self,opt):
+        super(Stmodel,self).__init__()
+        self.opt = opt
+        self.state_dim = self.opt.state_dim
+        self.state_fc = nn.Sequential(
+            nn.Linear(self.state_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, self.state_dim)
+        )
+
+    def forward(self, state):
+        state = self.state_fc(state)
+        return state
+
+class DStmodel(nn.Module):
+    def __init__(self,opt):
+        super(DStmodel,self).__init__()
+        self.opt = opt
+        self.state_dim = self.opt.state_dim
+        self.state_fc = nn.Sequential(
+            nn.Linear(self.state_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 64),
+            nn.ReLU(),
+            nn.Linear(64, 2)
+        )
+
+    def forward(self, state):
+        return self.state_fc(state)
 
 class Dmodel(nn.Module):
     def __init__(self,opt):

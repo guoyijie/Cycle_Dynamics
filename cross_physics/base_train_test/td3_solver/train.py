@@ -40,6 +40,7 @@ def main(args):
 	print("---------------------------------------")
 
 	log_path = safe_path(os.path.join(args.log_root, '{}_base'.format(args.env)))
+	# log_path = safe_path("/home/wuqiuche/Cycle_Dynamics/logs/cross_physics/HalfCheetah-v2_base")
 	result_path = safe_path(os.path.join(log_path, 'results'))
 	model_path = safe_path(os.path.join(log_path, 'models'))
 
@@ -79,6 +80,7 @@ def main(args):
 	episode_reward = 0
 	episode_timesteps = 0
 	episode_num = 0
+	cnt_reward_pos = 0
 
 	for t in range(int(args.max_timesteps)):
 
@@ -95,6 +97,9 @@ def main(args):
 
 		# Perform action
 		next_state, reward, done, _ = env.step(action)
+		# if reward > 0:
+		# 	cnt_reward_pos += 1
+		# print(env._max_episode_steps)
 		done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
 
 		# Store data in replay buffer
@@ -111,6 +116,7 @@ def main(args):
 			# +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
 			print(
 				f"Total T: {t + 1} Episode Num: {episode_num + 1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
+			# print(cnt_reward_pos)
 			# Reset environment
 			state, done = env.reset(), False
 			episode_reward = 0
@@ -144,7 +150,7 @@ if __name__ == "__main__":
 	parser.add_argument("--save_model", default=True)               # Save model and optimizer parameters
 	parser.add_argument("--load_model", default="")                 # Model load file name, "" doesn't load, "default" uses file_name
 
-	parser.add_argument("--log_root", default="../../../../logs/cross_physics")
+	parser.add_argument("--log_root", default="../../../logs/cross_physics")
 	args = parser.parse_args()
 
 	main(args)

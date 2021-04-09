@@ -11,9 +11,12 @@ import matplotlib.pyplot as plt
 import torch.utils.data as Data
 import matplotlib.pyplot as plt
 
-from collect_data import CycleData
+# from collect_data import CycleData
+from collect_data_push_dooropen import CycleData
 from models import Forwardmodel,Axmodel,Dmodel,GANLoss,ImagePool,net_init
 
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter()
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -49,9 +52,11 @@ class ActionAgent:
         self.opt = opt
         opt.data_type = opt.data_type1
         opt.data_id = opt.data_id1
+        opt.env = opt.env1
         self.agent1 = Agent(opt)
         opt.data_type = opt.data_type2
         opt.data_id = opt.data_id2
+        opt.env = opt.env2
         self.agent2 = Agent(opt)
         opt.state_dim = self.agent1.dataset.state_dim
         opt.action_dim = self.agent1.dataset.action_dim
@@ -107,21 +112,25 @@ class ActionAgent:
         pred_fake = self.dmodel(fake_ab)
         loss_g_gan = self.criterionGAN(pred_fake, True)
 
-        return loss_g_gan
+        return loss_g_gan, loss_d, loss_d_fake, loss_d_real
 
     def train_ax(self):
+        gen_action = []
         lr = 1e-3
         optimizer_g,optimizer_d = self.get_optim(lr)
         loss_fn = nn.L1Loss()
 
         print('----------initial test as baseline--------------')
-        ref_reward = self.agent2.dataset.online_test(lambda x,y:y,10)
+        ref_reward = self.agent2.dataset.online_test(lambda x,y:y, self.agent1.dataset, 10)
 
         ours,baseline = [],[]
         self.opt.istrain = True
         last_back_loss = 100.
         max_reward = 0.
         for epoch in range(self.opt.epoch_n):
+            # print("------")
+            # print("\n"*20)
+            # print(epoch)
             epoch_loss, cmp_loss = 0, 0
             if self.opt.env == 'HalfCheetah-v2':
                 if epoch == 10:
@@ -132,6 +141,8 @@ class ActionAgent:
                     optimizer_g,optimizer_d = self.get_optim(lr)
 
             for i in (range(self.opt.pair_n)):
+                # print("\n"*10)
+                # print(i)
                 item1 = self.agent1.dataset.sample()
                 real_action = item1[1]
 
@@ -147,8 +158,20 @@ class ActionAgent:
                 loss_back = loss_fn(back_action,action)
                 loss += loss_back
 
-                loss_g_gan = self.cal_gan(real_action,trans_action)
+                loss_g_gan, loss_d, loss_d_fake, loss_d_real = self.cal_gan(real_action,trans_action)
                 loss_all = loss + loss_g_gan
+
+                if epoch == 1:
+                    gen_action.append(np.array(trans_action.detach().cpu()))
+
+                if i % 100 == 0:
+                    writer.add_scalar("trainingIn/loss_cycle", loss_cycle, i + epoch * self.opt.pair_n)
+                    writer.add_scalar("trainingIn/loss_back", loss_back, i + epoch * self.opt.pair_n)
+                    writer.add_scalar("trainingIn/loss_g_gan", loss_g_gan, i + epoch * self.opt.pair_n)
+                    writer.add_scalar("trainingIn/loss_d", loss_d, i + epoch * self.opt.pair_n)
+                    writer.add_scalar("trainingIn/loss_d_fake", loss_d_fake, i + epoch * self.opt.pair_n)
+                    writer.add_scalar("trainingIn/loss_d_real", loss_d_real, i + epoch * self.opt.pair_n)
+
                 # loss_all = loss
 
                 if self.opt.istrain:
@@ -157,16 +180,22 @@ class ActionAgent:
                     optimizer_g.step()
                 epoch_loss += loss_cycle.item()
                 cmp_loss += loss_back.item()
+            if epoch == 1:
+                np.save("gen.npy", np.array(gen_action))
+
             print('epoch:{} cycle_loss:{:.3f}  back_loss:{:.3f}'
                   .format(epoch, epoch_loss / self.opt.pair_n, cmp_loss / self.opt.pair_n))
 
-            reward_ours = self.agent2.dataset.online_test(self.back_model,self.opt.eval_n)
+            reward_ours = self.agent2.dataset.online_test(self.back_model, self.agent1.dataset, self.opt.eval_n)
 
             if reward_ours.mean() > max_reward:
                 max_reward = reward_ours.mean()
                 torch.save(self.back_model.state_dict(), self.weight_path)
             print('ours_cur:{:.2f}  ours_max:{:.2f}  ref_baseline:{:.2f}\n'
                   .format(reward_ours.mean(), max_reward, ref_reward.mean()))
+            writer.add_scalar("ours_cur", reward_ours.mean(), epoch)
+            writer.add_scalar("ours_max", max_reward, epoch)
+            writer.add_scalar("ref_baseline", ref_reward.mean(), epoch)
 
     def eval_ax(self):
         self.back_model.load_state_dict(torch.load(self.weight_path))
@@ -178,8 +207,8 @@ class ActionAgent:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='control dataset analyzer')
-    parser.add_argument('--istrain', type=bool, default=False, help='train or eval')
-    parser.add_argument('--pretrainF', type=bool, default=False, help='train or eval')
+    parser.add_argument('--istrain', type=bool, default=True, help='train or eval')
+    # parser.add_argument('--pretrainF', type=bool, default=False, help='train or eval')
     parser.add_argument('--pair_n', type=int, default=3000, help='dataset sample number')
 
     parser.add_argument("--env", default="Walker2d-v2")
@@ -196,19 +225,20 @@ if __name__ == '__main__':
     parser.add_argument('--data_type2', type=str, default='arma3', help='data type')
 
     parser.add_argument('--data_id', type=int, default=0, help='data id')
-    parser.add_argument('--data_id1', type=int, default=1, help='data id')
-    parser.add_argument('--data_id2', type=int, default=1, help='data id')
+    parser.add_argument('--data_id1', type=int, default=3, help='data id')
+    parser.add_argument('--data_id2', type=int, default=3, help='data id')
 
     opt = parser.parse_args()
 
-    opt.env = 'HalfCheetah-v2'
+    opt.env1 = opt.data_type1
+    opt.env2 = opt.data_type2
     opt.eval_n = 5
     opt.pair_n = 3000
     opt.istrain = True
     opt.epoch_n = 30
     # opt.data_id1 = 4
     # opt.data_id2 = 4
-    opt.data_type2 = 'arma3'
+    # opt.data_type2 = 'arma3'
     agent = ActionAgent(opt)
     agent.train_ax()
 
@@ -236,5 +266,7 @@ if __name__ == '__main__':
     # # agent.train_ax()
     # agent.eval_ax()
 
+# forward model: loss
+# state data distribution, goal position can be different.
 
 

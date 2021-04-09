@@ -1,0 +1,38 @@
+{
+    "agent":"PPO",
+    "env_name" : "CartPole-v1",
+    "env":{
+        "reward_scale":1,
+        "obs_norm":false,
+        "obs_alpha":0.001
+    },
+    "replay_buffer":{
+        "size": 1000
+    },
+    "policy":{
+    },
+    "net":{ 
+        "hidden_shapes": [64, 64],
+        "append_hidden_shapes":[]        
+    },
+    "general_setting": {
+        "discount" : 0.99,
+
+        "num_epochs" : 3000,
+        "epoch_frames" : 1000,
+        "max_episode_frames" : 1000,
+
+        "batch_size" : 256,
+
+        "eval_episodes" : 1
+    },
+    "ppo":{
+        "plr" : 3e-3,
+        "vlr" : 3e-3,
+        "clip_para" : 0.2,
+        "opt_epochs": 10,
+        "tau": 0.95,
+        "entropy_coeff":0.001,
+        "shuffle":true
+    }
+}

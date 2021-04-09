@@ -1,0 +1,410 @@
+
+import os
+import gym
+import torch
+import random
+import argparse
+import numpy as np
+from tqdm import tqdm
+import torch.nn as nn
+import torch.nn.functional as F
+
+from PIL import Image
+from models import Actor,Forwardmodel,Inversemodel
+
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter()
+
+def safe_path(path):
+    if not os.path.exists(path):
+        os.mkdir(path)
+    return path
+
+
+class TD3(object):
+    def __init__(self,policy_path,state_dim,action_dim,max_action):
+        self.actor = Actor(state_dim, action_dim, max_action).cuda()
+        self.weight_path = policy_path
+        self.actor.load_state_dict(torch.load("/home/wuqiuche/Cycle_Dynamics/logs/cross_physics/HalfCheetah-v2_base/models/TD3_HalfCheetah-v2_0_actor"))
+        print('policy weight loaded!')
+        # self.axmodel = Axmodel(opt).cuda()
+        # self.ax_weight_path = opt.axmodel_path
+        # self.axmodel.load_state_dict(torch.load(self.ax_weight_path))
+        # print('axmodel weight loaded!')
+
+    def select_action(self, state):
+        state = torch.FloatTensor(state.reshape(1, -1)).cuda()
+        action = self.actor(state).cpu().data.numpy().flatten()
+        return action
+
+    def online_action(self,state):
+        state = torch.FloatTensor(state.reshape(1, -1)).cuda()
+        action = self.axmodel(state,self.actor(state)).cpu().data.numpy().flatten()
+        return action
+
+    def online_axmodel(self,state,axmodel):
+        state = torch.FloatTensor(state.reshape(1, -1)).cuda()
+        action = axmodel(state,self.actor(state)).cpu().data.numpy().flatten()
+        return action
+
+import sys
+sys.path.append("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/cross_physics/base_train_test/td3_solver/torchrl/")
+import torchrl.policies as policies
+import torchrl.networks as networks
+import metaworld
+import random
+class CycleData:
+    def __init__(self, opt):
+        self.pair_n = 3000
+        self.opt = opt
+        if opt.env in ['push', 'door_open', 'push_back', 'coffee_push']:
+            print("True")
+            if opt.env == 'push':
+                print("Push")
+                ml1 = metaworld.ML1('push-v1')
+                self.env = ml1.train_classes['push-v1']()
+                task = random.choice(ml1.train_tasks[0:50])
+                self.env.set_task(task)
+            elif opt.env == 'door_open':
+                print("Door_open")
+                ml1 = metaworld.ML1('door-open-v1')
+                self.env = ml1.train_classes['door-open-v1']()
+                task = random.choice(ml1.train_tasks[0:50])
+                self.env.set_task(task)
+            elif opt.env == 'push_back':
+                print("Push_back")
+                ml1 = metaworld.ML1('push-back-v1')
+                self.env = ml1.train_classes['push-back-v1']()
+                task = random.choice(ml1.train_tasks[0:50])
+                self.env.set_task(task)
+            elif opt.env == 'coffee_push':
+                print("Coffee_push")
+                ml1 = metaworld.ML1('coffee-push-v1')
+                self.env = ml1.train_classes['coffee-push-v1']()
+                task = random.choice(ml1.train_tasks[0:50])
+                self.env.set_task(task)       
+        # self.env = gym.make(opt.env)
+        self.env.seed(1)
+        random.seed(1)
+        self.state_dim = self.env.observation_space.shape[0]
+        self.action_dim = self.env.action_space.shape[0]
+        self.max_action = float(self.env.action_space.high[0])
+        self.log_root = opt.log_root
+        self.episode_n = opt.episode_n
+        self.policy = policies.GuassianContPolicy(input_shape=self.state_dim, output_shape=2 * self.action_dim, **{"hidden_shapes": [400,400,400,400],"append_hidden_shapes": [], "base_type": networks.MLPBase, "activation_func": torch.nn.ReLU},**{"tanh_action": True})
+        self.policy.to("cuda")
+        if opt.env == 'push':
+            self.policy.load_state_dict(torch.load("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/cross_physics/base_train_test/td3_solver/torchrl/log/sac_push_400_4/Push/0/model/model_pf_best.pth"))
+            # self.policy.load_state_dict(torch.load("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/cross_physics/base_train_test/td3_solver/torchrl/log/push_to_dooropen_400/Push/0/model/model_pf_best.pth"))
+            # self.policy.load_state_dict(torch.load("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/cross_physics/base_train_test/td3_solver/torchrl/log/push_to_dooropen_400_full_observ/Push/0/model/model_pf_best.pth"))
+            # self.policy.load_state_dict(torch.load("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/cross_physics/base_train_test/td3_solver/torchrl/log/push_obj_goal_to_dooropen_400/Push/0/model/model_pf_best.pth"))
+        elif opt.env == 'door_open':
+            # self.policy.load_state_dict(torch.load("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/cross_physics/base_train_test/td3_solver/torchrl/log/door_open_400_4/Door_open/0/model/model_pf_best.pth"))
+            self.policy.load_state_dict(torch.load("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/cross_physics/base_train_test/td3_solver/torchrl/log/door_open_fullobserv_400/Door_open/0/model/model_pf_best.pth"))
+        elif opt.env == 'push_back':
+            self.policy.load_state_dict(torch.load("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/cross_physics/base_train_test/td3_solver/torchrl/log/push_back_400/Push_back/0/model/model_pf_best.pth"))
+        elif opt.env == 'coffee_push':
+            self.policy.load_state_dict(torch.load("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/cross_physics/base_train_test/td3_solver/torchrl/log/coffee_push_400/Coffee_push/0/model/model_pf_best.pth"))
+        
+
+        self.policy.eval()
+
+        print(opt.env, "opt_env")
+        print(self.opt.env, "self_opt_env")
+        # self.policy_path = os.path.join(opt.log_root,
+        #                 '{}_base/models/TD3_{}_0_actor'.format(opt.env,opt.env))
+        # self.policy = TD3(self.policy_path,self.state_dim,self.action_dim,self.max_action)
+        self.data1 = self.collect(self.opt.data_id)
+        print('----------- Dataset initialized ---------------')
+        print('-----------------------------------------------')
+        self.sample_n1 = self.data1[0].shape[0]
+        self.reset()
+
+        opt.state_dim = self.state_dim
+        opt.action_dim = self.action_dim
+        self.model = Forwardmodel(opt).cuda()
+        self.train_forward()
+        print('-----------------------------------------------')
+        self.inverse_model = Inversemodel(opt).cuda()
+        self.train_inverse()
+        print('-----------------------------------------------\n')
+
+    def sample(self, batch_size=32):
+        id1 = random.sample(range(self.sample_n1), batch_size)
+        sample1 = (self.to_device(self.data1[0][id1]),
+                   self.to_device(self.data1[1][id1]),
+                   self.to_device(self.data1[2][id1]))
+        return sample1
+
+    def reset(self):
+        idx = list(range(self.sample_n1))
+        random.shuffle(idx)
+        now = self.data1[0][idx]
+        act = self.data1[1][idx]
+        nxt = self.data1[2][idx]
+        self.data1 = (now,act,nxt)
+        self.pos = 0
+
+    def sample1(self,batch_size=32):
+        start = self.pos*batch_size
+        end = start+batch_size
+        if end>=self.sample_n1:
+            start = 0
+            end = start+batch_size
+        self.pos = end
+        id1 = list(range(start,end))
+        sample1 = (self.to_device(self.data1[0][id1]),
+                   self.to_device(self.data1[1][id1]),
+                   self.to_device(self.data1[2][id1]))
+        return sample1
+
+    def to_device(self,data):
+        return torch.tensor(data).float().cuda()
+
+    def collect(self, data_id):
+        if self.opt.env == "push":
+            print("Env logs for push")
+            self.env_logs = safe_path("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/logs/cross_physics/push_data")
+        elif self.opt.env == "door_open":
+            print("Env logs for door_open")
+            self.env_logs = safe_path("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/logs/cross_physics/door_open_data")
+        elif self.opt.env == "coffee_push":
+            print("Env logs for coffee_push")
+            self.env_logs = safe_path("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/logs/cross_physics/coffee_push_data")
+        elif self.opt.env == "push_back":
+            print("Env logs for push_back")
+            self.env_logs = safe_path("/mnt/brain7/scratch/wuqiuche/Cycle_Dynamics/logs/cross_physics/push_back_data")
+
+        data_folder = safe_path(os.path.join(self.env_logs,'{}_{}'.format(self.opt.data_type,self.opt.data_id)))
+        self.data_folder = data_folder
+        if not os.path.exists(data_folder):
+            os.mkdir(data_folder)
+        now_path = os.path.join(data_folder,'now.npy')
+        nxt_path = os.path.join(data_folder,'nxt.npy')
+        act_path = os.path.join(data_folder,'act.npy')
+        try:
+            now_obs = np.load(now_path)
+            nxt_obs = np.load(nxt_path)
+            action = np.load(act_path)
+            if not self.opt.force:
+                return (now_obs, action, nxt_obs)
+        except:
+            print('start to create data')
+
+        now_buffer, action_buffer, nxt_buffer = [], [], []
+        episode_r = 0.
+
+        for episode in tqdm(range(self.episode_n)):
+            now_obs, action, nxt_obs = [], [], []
+            if self.opt.env == "push":
+                ml1 = metaworld.ML1('push-v1')
+                self.env = ml1.train_classes['push-v1']()
+            elif self.opt.env == "door_open":
+                ml1 = metaworld.ML1('door-open-v1')
+                self.env = ml1.train_classes['door-open-v1']()
+            elif self.opt.env == 'push_back':
+                ml1 = metaworld.ML1('push-back-v1')
+                self.env = ml1.train_classes['push-back-v1']()
+            elif self.opt.env == 'coffee_push':
+                ml1 = metaworld.ML1('coffee-push-v1')
+                self.env = ml1.train_classes['coffee-push-v1']() 
+            task = random.choice(ml1.train_tasks[0:50])
+            self.env.set_task(task)
+            obs, done = self.env.reset(), False
+            done = False
+            cnt = 0
+            while not done:
+                cnt += 1
+                if cnt > 150:
+                    break
+                now_obs.append(obs)
+                # offline policy sample
+                sample_info = self.policy.explore(torch.Tensor(obs).unsqueeze(0).to("cuda"))
+                act = sample_info["action"].detach().to("cpu").numpy()
+                # print(act)
+                # act = act[..., 0]
+                # print(act)
+                # act = self.policy.select_action(obs)
+                # act = self.env.action_space.sample()
+                # online policy sample
+                # act = self.policy.online_action(obs)
+                new_obs, r, done, info = self.env.step(act)
+                action.append(act)
+                nxt_obs.append(new_obs)
+                obs = new_obs
+                episode_r += r
+            now_buffer.extend(now_obs)
+            action_buffer.extend(action)
+            nxt_buffer.extend(nxt_obs)
+        print('average reward: {:.2f}'.format(episode_r/self.episode_n))
+        writer.add_scalar("avg reward", episode_r/self.episode_n, 1)
+        now_obs = np.stack(now_buffer)
+        action = np.stack(action_buffer)
+        nxt_obs = np.stack(nxt_buffer)
+
+        np.save(now_path, now_obs)
+        np.save(act_path, action)
+        np.save(nxt_path, nxt_obs)
+
+        return (now_obs, action, nxt_obs)
+
+    def train_forward(self):
+        self.weight_path = os.path.join(self.data_folder, 'forward.pth')
+        try:
+            self.model.load_state_dict(torch.load(self.weight_path))
+            print('load forward model correctly!')
+            return 0
+        except:
+            print('start to train forward model!')
+        optimizer = torch.optim.Adam(self.model.parameters(),lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        for epoch in range(30):
+            epoch_loss, cmp_loss = 0, 0
+            if epoch==10:
+                optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
+            elif epoch==20:
+                optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-4)
+            for i in (range(self.pair_n)):
+                item = self.sample()
+                state, action, result = item
+                out = self.model(state, action)
+                loss = loss_fn(out, result)
+                if i % 100 == 0:
+                    writer.add_scalar("forward/loss",  loss, i + epoch * self.pair_n)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+            print('epoch:{} loss:{:.7f}'.format(epoch, epoch_loss / self.pair_n))
+            writer.add_scalar("forward/epoch_loss", epoch_loss,  epoch)
+            torch.save(self.model.state_dict(), self.weight_path)
+
+        epoch_loss, cmp_loss = 0, 0
+        for i in (range(self.pair_n)):
+            item = self.sample()
+            state, action, result = item
+            out = self.model(state, action)
+            loss = loss_fn(out, result)
+            epoch_loss += loss.item()
+        print('evaluation loss:{:.7f}'.format(epoch_loss / self.pair_n))
+
+    def train_inverse(self):
+        self.inverse_weight_path = os.path.join(self.data_folder, 'inverse.pth')
+        try:
+            self.inverse_model.load_state_dict(torch.load(self.inverse_weight_path))
+            print('load inverse model correctly!')
+            return 0
+        except:
+            print('start to train inverse model!')
+        optimizer = torch.optim.Adam(self.inverse_model.parameters(),lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        for epoch in range(30):
+            epoch_loss, cmp_loss = 0, 0
+            if epoch==10:
+                optimizer = torch.optim.Adam(self.inverse_model.parameters(), lr=3e-4)
+            elif epoch==20:
+                optimizer = torch.optim.Adam(self.inverse_model.parameters(), lr=1e-4)
+            for i in (range(self.pair_n)):
+                item = self.sample()
+                state, action, result = item
+                out = self.inverse_model(state, result)
+                loss = loss_fn(out, action)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+            print('epoch:{} loss:{:.7f}'.format(epoch, epoch_loss / self.pair_n))
+            torch.save(self.inverse_model.state_dict(), self.inverse_weight_path)
+
+        epoch_loss, cmp_loss = 0, 0
+        for i in (range(self.pair_n)):
+            item = self.sample()
+            state, action, result = item
+            out = self.inverse_model(state, result)
+            loss = loss_fn(out, action)
+            epoch_loss += loss.item()
+        print('evaluation loss:{:.7f}'.format(epoch_loss / self.pair_n))
+
+
+    def online_test(self,axmodel,other_model, episode_n=100,imgpath=None):
+        print("In online test, env", self.opt.env)
+        save_flag = False
+        if imgpath is not None:
+            if not os.path.exists(imgpath):
+                os.mkdir(imgpath)
+            save_flag = True
+        with torch.no_grad():
+            now_buffer, action_buffer, nxt_buffer = [], [], []
+            reward_buffer = []
+            for episode in (range(episode_n)):
+                now_obs, action, nxt_obs = [], [], []
+                if self.opt.env == 'push':
+                    ml1 = metaworld.ML1('push-v1')
+                    self.env = ml1.train_classes['push-v1']()
+                elif self.opt.env == 'door_open':
+                    ml1 = metaworld.ML1('door-open-v1')
+                    self.env = ml1.train_classes['door-open-v1']()
+                elif self.opt.env == 'coffee_push':
+                    ml1 = metaworld.ML1('coffee-push-v1')
+                    self.env = ml1.train_classes['coffee-push-v1']()
+                elif self.opt.env == 'push_back':
+                    ml1 = metaworld.ML1('push-back-v1')
+                    self.env = ml1.train_classes['push-back-v1']()
+
+                task = random.choice(ml1.train_tasks[0:50])
+                self.env.set_task(task)
+                obs = self.env.reset()
+                done = False
+                episode_r = 0.
+                if save_flag:
+                    episode_path = os.path.join(imgpath, 'episode_{}'.format(episode))
+                    if not os.path.exists(episode_path):
+                        os.mkdir(episode_path)
+                count = 0
+                cnt_step = 0
+                while not done:
+                    cnt_step += 1
+                    if cnt_step > 150:
+                        break
+                    # img = self.env.sim.render(mode='offscreen', camera_name='track', width=256, height=256)
+                    if save_flag:
+                        Image.fromarray(img[::-1, :, :]).save(os.path.join(episode_path, 'img_{}.jpg'.format(count)))
+                        count += 1
+                        print(episode,count)
+
+                    now_obs.append(obs)
+                    act = self.policy.online_axmodel(obs,axmodel,other_model)
+                    new_obs, r, done, info = self.env.step(act)
+                    action.append(act)
+                    nxt_obs.append(new_obs)
+                    obs = new_obs
+                    episode_r += r
+                reward_buffer.append(episode_r)
+                now_buffer.extend(now_obs)
+                action_buffer.extend(action)
+                nxt_buffer.extend(nxt_obs)
+                # print(episode_r/(episode+1))
+            episode_r = sum(reward_buffer)
+            # print('average reward: {:.2f}'.format(episode_r/episode_n))
+            return np.array(reward_buffer)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='control dataset analyzer')
+    parser.add_argument("--env", default="HalfCheetah-v2")
+    parser.add_argument("--force", type=bool, default=True)
+    parser.add_argument("--log_root", default="../../../logs/cross_physics")
+    parser.add_argument('--data_type', type=str, default='arma3', help='data type')
+    parser.add_argument('--data_id', type=int, default=2, help='data id')
+    parser.add_argument('--episode_n', type=int, default=1000, help='episode number')
+    opt = parser.parse_args()
+
+    dataset = CycleData(opt)
+    item = dataset.sample()
+    now,act,nxt = item
+    print(now.shape,act.shape,nxt.shape)
+    print(now.mean().item(),act.mean().item(),nxt.mean().item())
+
+

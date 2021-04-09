@@ -4,6 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter()
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -127,6 +130,7 @@ class TD3(object):
 
 		# Compute critic loss
 		critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
+		writer.add_scalar("critic_loss/train", critic_loss, self.total_it)
 
 		# Optimize the critic
 		self.critic_optimizer.zero_grad()
@@ -138,6 +142,7 @@ class TD3(object):
 
 			# Compute actor losse
 			actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
+			writer.add_scalar("actor_loss/train", actor_loss, self.total_it)
 			
 			# Optimize the actor 
 			self.actor_optimizer.zero_grad()
@@ -151,6 +156,7 @@ class TD3(object):
 			for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
 				target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
+		writer.flush()
 
 	def save(self, filename):
 		torch.save(self.critic.state_dict(), filename + "_critic")
